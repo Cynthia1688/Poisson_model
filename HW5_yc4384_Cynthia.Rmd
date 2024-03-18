@@ -1,0 +1,284 @@
+---
+title: "HW5"
+author: "Yangyang Chen"
+date: "`r Sys.Date()`"
+output: 
+    pdf_document:
+      latex_engine: xelatex
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(pscl)
+```
+
+## Nesting Horsehoe Crabs
+
+In a study of nesting horseshoe crabs, each female horseshoe crab had a male crab attached to her in her nest. The study investigated factors that affect whether the female crab had any other males, called satellites, residing near her. Explanatory variables that are thought to affect this included the female crab’s color (C), spine condition (S), carapace width (W) and weight (Wt). The response outcome for each female crab is her number of satellites (Sa). There are 173 females in this study. Data are provided in the crab.txt.
+
+### (a) 
+
+Fit a Poisson model (M1) with log link with W as the single predictor. Check the goodness of fit and interpret your model.
+
+```{r}
+crab_df = read_table("HW5-crab.txt")
+crab_df |> head()
+crab_df |> str()
+```
+The dataset contains 173 observations and 6 variables with each observation indicating the physiological condition and number of satellites of one female crab.
+
+For the convenience of the model fitting, we let Y denote the number of satellites, and assume that $Y \sim Poisson(\lambda).$
+
+### Fit the M1 model
+
+```{r}
+m1 = crab_df |> glm(Sa~W, family=poisson(link=log), data=_)
+summary(m1)
+```
+
+We obtained the poisson log link model M1:
+$log(\lambda)= -3.3 + 0.16*W$
+
+* $\beta_0 = -3.3$: The log rate number of female crab's satellites with 0 carapace width is -3.3.
+
+* $\beta_1 = 0.16$: The log rate number of female crab's satellites will increases by $exp(1.164) = 1.17$ with each unit increment in carapace width.
+
+### Check goodness-of-fit
+```{r}
+## deviance
+D1 <- sum(residuals(m1, type = "deviance")^2) 
+D1
+## Pearson chi-square
+G1 <- sum(residuals(m1, type = "pearson")^2) 
+G1
+pvalue1 <- 1 - pchisq(D1, dim(crab_df)[1]-2) 
+pvalue1
+
+## p1 = 1-pchisq(m1$deviance, df = nrow(crab_df) - 2)
+```
+* Since $D = 567.8786, df = 171, p-value = 0 < 0.05$, we rejected the model and concluded that the model doesn't fit data well. 
+
+* The effect of carapace width on number of satellites is significant.
+
+### (b)
+
+Fit a model (M2) with W and Wt as predictors. Compare it with the model in (a). Interpret
+your results.
+
+### Fit M2 Model
+```{r}
+m2 = crab_df |> glm(Sa ~ W + Wt, family=poisson(link=log), data=_)
+summary(m2)
+```
+
+We obtained the poisson log link model M2:
+
+$log(\lambda) = −1.292 + 0.0459W + 0.447Wt$.
+
+* $\beta_0 = -1.292$: The log rate of number of female crab's satellites with 0 carapace width is -1.292.
+
+* $\beta_1 = 0.046$: The log rate of number of female crab's satellites will increases by $exp(0.046) =  1.05$ with each unit increment in carapace width, holding Weight(Wt) unchanged.
+
+* $\beta_2 = 0.447$: The log rate of number of female crab's satellites will increases by $exp(0.447) =  1.56$ with each unit increment in carapace width, holding Width(W) unchanged.
+
+### Check goodness-of-fit of M1 and M2
+
+```{r}
+# ## deviance
+# D2 <- sum(residuals(m2, type = "deviance")^2) 
+# D2
+# ## Pearson chi-square
+# G2 <- sum(residuals(m2, type = "pearson")^2) 
+# G2
+# pvalue2 <- 1 - pchisq(D2, dim(crab_df)[1]-2) 
+# pvalue2
+p2_1 = 1 - pchisq(m1$deviance - m2$deviance, df = 1)
+```
+
+Since $D = D_1 - D_2 = 7.99, df = 1, p-value = 0.004 < 0.05$, we rejected the null hypothesis and concluded that the model doesn't fit data well.
+
+### (c) 
+
+Check over dispersion in M2. Interpret the model after adjusting for over dispersion.
+
+### Check goodness-of-fit of M2
+```{r}
+p2 = 1 - pchisq(m2$deviance, df = nrow(crab_df) - 3)
+p2
+```
+Since $D = 559.885, df = 170, p = 0 < 0.05$, we rejected the model M2 and concluded that M2 is also not a good fit for the data. Therefore, we suspected there exists over-dispersion:
+
+### Estimate over-dispersion parameter
+```{r}
+res.p1 = crab_df |> residuals(m2,type='pearson',data=_)
+G1=sum(res.p1^2) # calc dispersion param based on full model
+pval=1-pchisq(G1,df = dim(crab_df)[1]-3) # lack of fit
+phi=G1/(dim(crab_df)[1]-3)
+phi
+```
+
+Over dispersion parameter $\hat{\phi} = \frac{G_1}{n-p} = 3.156$.
+
+### Half-normal plot
+```{r}
+plot(qnorm((dim(crab_df)[1]+1:dim(crab_df)[1]+0.5)/(2*dim(crab_df)[1]+1.125)),
+     sort(abs(res.p1)),
+     xlab='Expected Half-Normal Order Stats',
+     ylab='Ordered Abs Pearson Residuals')
+abline(a=0,b=1)
+abline(a=0,b=sqrt(phi),lty=2)
+```
+
+The linear deviation from the reference line indicatess constant over-dispersion.
+
+```{r}
+# fit model with constant over-dispersion
+summary(m2, dispersion = phi)
+```
+
+We obtained the poisson log link model M2 (with dispersion parameter):
+
+$log(E(y))= −1.292 + 0.0459W + 0.447Wt$.
+
+* $\beta_0 = -1.292$: The log rate ratio of female crab's satellites with 0 carapace width is -1.292.
+
+* $\beta_1 = 0.046$: The log rate ratio of female crab's satellites will increase by $exp(0.046) =  1.05$ with each unit increment in carapace width, holding Weight(Wt) unchanged.
+
+* $\beta_2 = 0.447$: The log rate ratio of female crab's satellites will increase by $exp(0.447) =  1.56$ with each unit increment in carapace width, holding Width(W) unchanged.
+
+### Checking goodness-of-fit of M2 with dispersion parameter
+
+```{r}
+# deviance analysis
+pval2 = 1 - pchisq(m2$deviance/phi, df = nrow(crab_df)-3) 
+pval2
+```
+
+Since $p-value = 0.333 > 0.05$, we failed to reject the model and concluded that after considering over-dispersion, the model fits the data well.
+
+## Prevalence of Parasites
+
+Researchers examined a large number of fish to determine the prevalence of parasites. The dataset (parasite.txt) includes the variables Intensity (i.e., the number of parasites), Area (a categorical variable), Year (to be treated as categorical), and Length of the fish.
+
+### (a) 
+
+Fit a Poisson model with log link to the data with area, year, and length as predictors. Interpret each model parameter.
+
+```{r}
+paras_df = read_table("HW5-parasite.txt") |>
+  janitor::clean_names() |> 
+  mutate(
+  year = as.character(year),
+  area = as.character(area)
+)
+paras_df |> head()
+```
+
+### Fit the model
+
+```{r}
+pois.fit = paras_df |> glm(intensity~area+year+length, family=poisson(link=log), data=_)
+summary(pois.fit)
+```
+The poisson log link model is:
+
+$M: log(E(Intensity)) = \beta_0 + \beta_1I(Area = 2) + \beta_2(Area = 3) + \beta_3I(Area = 4) + \beta_4I(Year = 2000) + \beta_5I(Year = 2001) + \beta_6I(Length)$
+
+We obtained the poisson log link model (without dispersion parameter):
+
+$log(E(Intensity)) = 2.643 - 0.211x_1 - 0.116x_2 + 1.405x_3 + 0.670x_4 - 0.218x_5 - 0.028I(length)$.
+
+The interpretation of the coefficients is as follows:
+
+* $\beta_0 = 2.643$: The log rate ratio of parasite's intensity within Area = 1 (reference group), Year = 1999 (reference group), and Length = 0 is 2.643.
+
+* $\beta_1 = - 0.211$ indicates the relative log rate ratio of parasite's intensity for Area = 2 is $exp(- 0.211) =  0.81$ times that for the parasite intensity in Area = 1, holding year and length unchanged.
+
+* $\beta_2 = - 0.116$ indicates the relative log rate ratio of parasite's intensity for Area = 3 is $exp(- 0.116) =  0.89$ times that for the parasite intensity in Area = 1, holding year and length unchanged.
+
+* $\beta_3 = 1.404$ indicates the relative log rate ratio of parasite's intensity for Area = 3 is $exp(1.404) =  4.07$ times that for the parasite intensity in Area = 1, holding year and length unchanged.
+
+* $\beta_4 = 0.670$ indicates the relative log rate ratio of parasite's intensity for Year = 2000 is $exp(0.670) =  1.95$ times that for the parasite intensity in Year = 1999, holding area and length unchanged.
+
+* $\beta_5 = -0.218$ indicates the relative log rate ratio of parasite's intensity for Year = 2001 is $exp(-0.218) = 0.80$ times that for the parasite intensity in Year = 1999, holding area and length unchanged.
+
+* $\beta_6 = -0.028$ indicates the increment of relative log rate ratio of parasite's intensity is $exp(-0.028) = 0.97$ with every unit increase of length of fish, holding area and year unchanged.
+
+(b) Test for goodness of fit of the model in (a) and state conclusions.
+
+```{r}
+# # goodness of fit
+# # Deviance
+# D3 <- sum(residuals(pois.fit, type = "deviance")^2) 
+# D3
+# Pearson Chi-square statistics
+G3 <- sum(residuals(pois.fit, type = "pearson")^2) 
+G3
+# # model fitting test
+# pvalue3 <- 1 - pchisq(deviance(pois.fit), df.residual(pois.fit)) 
+# pvalue3
+p = 1 - pchisq(pois.fit$deviance, df = pois.fit$df.residual)
+p
+```
+
+* $Pearson-\chi^2 statistic: X^2 = \sum X_i^2 = 42164.97 \ and\ Deviance \ D = \sum d_i^2 = 1.91528*10^4.$
+
+* Comparing $X^2$ and $D$ with $\chi^2(1184)$, since $p-value = 0 < 0.05$, we rejected the model and concluded that the model isn't a good fit for the data.
+
+### (c) 
+
+Researchers suspect that there may be two strains of fish, one that is susceptible to parasites
+and one that is not. Without knowing which fish are susceptible, this could be regarded as a
+zero-inflated model. Building on the model in (a) (using the same predictors), fit an appropriate model to the data that can account for extra zeros. Provide an interpretation for each model parameter in terms of the problem.
+
+Let $Z_i$ be a latent binary variable that generates structural zeros: $P(Z_i=0)=\pi_i$.
+
+Then, $$P(Y_i|Z_i=0) = 0, P(Y_i|Z_i=1)\sim Poisson(\lambda_i)$$.
+
+Here, we want to fit two models:
+
+* Count Model:
+$$log(\lambda) = \beta_0 + \beta_1I(Area = 2) + \beta_2(Area = 3) + \beta_3I(Area = 4) + \beta_4I(Year = 2000) + \beta_5I(Year = 2001) + \beta_6I(Length).$$
+
+* Binomial Model:
+$log(\frac{\pi}{1-\pi})= \beta_0 + \beta_1I(Area = 2) + \beta_2(Area = 3) + \beta_3I(Area = 4) + \beta_4I(Year = 2000) + \beta_5I(Year = 2001) + \beta_6I(Length).$
+
+```{r}
+zero.fit = paras_df |> 
+  zeroinfl(intensity ~ area + year + length, data = _)
+summary(zero.fit)
+```
+
+From the count model results, the interpretation of the coefficients is as follows:
+
+* $\beta_0 = 3.843$: The log rate ratio of parasite's intensity within Area = 1 (reference group), Year = 1999 (reference group), and Length = 0 is 3.843.
+
+* $\beta_1 = 0.268$ indicates the relative log rate ratio of parasite's intensity for Area = 2 is $exp(0.268) =  1.307$ times that for the parasite intensity in Area = 1, holding year and length unchanged.
+
+* $\beta_2 = 0.146$ indicates the relative log rate ratio of parasite's intensity for Area = 3 is $exp(0.146) =  1.157$ times that for the parasite intensity in Area = 1, holding year and length unchanged.
+
+* $\beta_3 = 0.944$ indicates the relative log rate ratio of parasite's intensity for Area = 3 is $exp(0.944) =  2.57$ times that for the parasite intensity in Area = 1, holding year and length unchanged.
+
+* $\beta_4 = 0.392$ indicates the relative log rate ratio of parasite's intensity for Year = 2000 is $exp(0.392) =  1.479$ times that for the parasite intensity in Year = 1999, holding area and length unchanged.
+
+* $\beta_5 = -0.045$ indicates the relative log rate ratio of parasite's intensity for Year = 2001 is $exp(-0.045) = 0.956$ times that for the parasite intensity in Year = 1999, holding area and length unchanged.
+
+* $\beta_6 = -0.037$ indicates the increment of relative log rate ratio of parasite's intensity is $exp(-0.037) = 0.963$ with every unit increase of length of fish, holding area and year unchanged.
+
+From the zero-inflation model results, the interpretation of the coefficients is as follows:
+
+* $\beta_0 = 0.552$: The log rate ratio of being insusceptible to parasite within Area = 1 (reference group), Year = 1999 (reference group), and Length = 0 is 0.552.
+
+* $\beta_1 = 0.268$ indicates the relative log rate ratio of being insusceptible to parasite for Area = 2 is $exp(0.268) =  1.307$ times that for the parasite intensity in Area = 1, holding year and length unchanged.
+
+* $\beta_2 = 0.146$ indicates the relative log rate ratio of being insusceptible to parasite for Area = 3 is $exp(0.146) =  1.157$ times that for the parasite intensity in Area = 1, holding year and length unchanged.
+
+* $\beta_3 = 0.944$ indicates the relative log rate ratio of being insusceptible to parasite for Area = 3 is $exp(0.944) =  2.57$ times that for the parasite intensity in Area = 1, holding year and length unchanged.
+
+* $\beta_4 = 0.392$ indicates the relative log rate ratio of being insusceptible to parasite for Year = 2000 is $exp(0.392) =  1.479$ times that for the parasite intensity in Year = 1999, holding area and length unchanged.
+
+* $\beta_5 = -0.045$ indicates the relative log rate ratio of being insusceptible to parasite for Year = 2001 is $exp(-0.045) = 0.956$ times that for the parasite intensity in Year = 1999, holding area and length unchanged.
+
+* $\beta_6 = -0.037$ indicates the increment of relative log rate ratio of being insusceptible to parasite is $exp(-0.037) = 0.963$ with every unit increase of length of fish, holding area and year unchanged.
